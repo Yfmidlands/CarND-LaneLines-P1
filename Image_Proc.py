@@ -154,7 +154,7 @@ class Image_Proc:
     """
     Eliminate outliers with unusual slope that might dislocate the actual line
     """
-
+    # Concept adopted from: https://medium.com/@zhuangh/finding-lane-lines-on-the-road-1c1d4618cc55
     def eliminate_outliers(self, points, cutoff, threshold=0.08):
         points = np.array(points)
         first_cutoff = cutoff[0]
@@ -169,6 +169,7 @@ class Image_Proc:
     that will pass closest to each
     """
     #https://docs.scipy.org/doc/numpy-1.13.0/reference/generated/numpy.linalg.lstsq.html
+    #Initial idea on the linear regression obtained from https://github.com/kenshiro-o/CarND-LaneLines-P1
     #scipy library used
     def linear_regression_least_squares(self, lanes_array):
         x_axis_array = np.reshape(lanes_array[:, [0, 2]], (1, len(lanes_array) * 2))[0]
@@ -199,6 +200,9 @@ class Image_Proc:
 
         return annotated_image
 
+    """
+    filter the image to mask out darker shades and get lighter pixels only
+    """
     def filter_color(self, img_hsv, lane_side):
         #import matplotlib.pyplot as plt
         #img_hsv = cv2.imread('test_images/solidYellowLeft.jpg')
@@ -229,9 +233,7 @@ class Image_Proc:
         #plt.imshow(color_select)
         #plt.show()
         return color_select
-        """
-        filter the image to mask out darker shades and get lighter pixels only
-        """
+
 
 
     def sliding_window(self, image, stepSize, windowSize):
