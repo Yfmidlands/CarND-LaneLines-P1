@@ -1,5 +1,11 @@
 import numpy as np
 import cv2
+import scipy as sp
+
+from moviepy.editor import VideoFileClip
+from IPython.display import HTML
+
+# A number of helper functions and tutorial adopted from Self-Driving Car Project Q&A | Finding Lane Lines at https://www.youtube.com/watch?v=hnXkCiM2RSg&feature=youtu.be
 
 class Image_Proc:
 
@@ -69,6 +75,8 @@ class Image_Proc:
         """
         lines = cv2.HoughLinesP(img, rho, theta, threshold, np.array([]), minLineLength=min_line_len,
                                 maxLineGap=max_line_gap)
+
+        # Create an empty image to be used as an overlay and pass it to the draw_lines function
         line_img = np.zeros((img.shape[0], img.shape[1], 3), dtype=np.uint8)
         self.draw_lines(line_img, lines)
         return line_img
@@ -90,63 +98,18 @@ class Image_Proc:
         return cv2.addWeighted(initial_img, α, img, β, γ)
 
     def draw_lines(self, img, lines, color=[255, 0, 0], thickness=2):
-        """
-        NOTE: this is the function you might want to use as a starting point once you want to
-        average/extrapolate the line segments you detect to map out the full
-        extent of the lane (going from the result shown in raw-lines-example.mp4
-        to that shown in P1_example.mp4).
 
-        Think about things like separating line segments by their
-        slope ((y2-y1)/(x2-x1)) to decide which segments are part of the left
-        line vs. the right line.  Then, you can average the position of each of
-        the lines and extrapolate to the top and bottom of the lane.
-
-        This function draws `lines` with `color` and `thickness`.
-        Lines are drawn on the image inplace (mutates the image).
-        If you want to make the lines semi-transparent, think about combining
-        this function with the weighted_img() function below
-        """
-        """
-
-        # Get the top-most point to draw the line 
-        y_minimum = np.min(y_axis)
-
-        # Draw the top most point via slope/intercept information obtained from linear regression   
-        top_point = np.array([(y_minimum - cutoff) / slope, y_minimum], dtype=int)
-
-        # Get the bottom left point
-        max_y = np.max(y_axis)
-
-        bottom_point = np.array([(max_y - cutoff) / slope, max_y], dtype=int)
-
-        x1e, y1e = extend_point(bot_point[0],bot_point[1],top_point[0],top_point[1], -1000) # bottom point
-
-        x2e, y2e = extend_point(bot_point[0],bot_point[1],top_point[0],top_point[1],  1000) # top point
-
-        # return the line.
-
-        line = np.array([[x1e,y1e,x2e,y2e]])
-        cv2.line(img, (x1, y1), (x2, y2), color, thickness)
-        #lines = np.array([line], dtype=np.int32)
-
-
-        """
-        # Get the slope of current line
-        left_lines = []  # (slope, intercept)
-        left_weights = []  # (length,)
-        right_lines = []  # (slope, intercept)
-        right_weights = []  # (length,)
-
+        #Separate lines based on their right and left slopes
         right_lines, left_lines = self.separate_lines(lines)
 
         if right_lines and left_lines:
             right = self.eliminate_outliers(right_lines, cutoff=(0.45, 0.75))
-            x_axis, y_axis, slope, cutoff = self.linear_regr(right)
+            x_axis, y_axis, slope, cutoff = self.linear_regression_least_squares(right)
             print("Processing right lines")
             print("X-axis \t", x_axis, "\t Y-axis", y_axis, "\t Slope", slope, "\t Cuttoff", cutoff, "\n")
 
             left = self.eliminate_outliers(left_lines, cutoff=(-0.85, -0.6))
-            x_axis, y_axis, slope, cutoff = self.linear_regr(left)
+            x_axis, y_axis, slope, cutoff = self.linear_regression_least_squares(left)
             print("Processing left lines")
             print("X-axis \t", x_axis, "\t Y-axis", y_axis, "\t Slope", slope, "\t Cuttoff", cutoff, "\n")
 
@@ -174,10 +137,17 @@ class Image_Proc:
         left_lane = []
 
         for x1, y1, x2, y2 in lines[:, 0]:
+
+            a = np.array((x1, y1))
+            b = np.array((x2, y2))
+
+            current_distance = np.linalg.norm(a - b)
+            print("Current line length " + str(current_distance))
+
             current_slope = self.slope(x1, y1, x2, y2)
-            if current_slope >= 0:
+            if current_slope >= 0 and current_distance >= 15:#Save in the right lane slope if the slope value is +ve
                 right_lane.append([x1, y1, x2, y2, current_slope])
-            else:
+            elif current_slope < 0 and current_distance >= 15:
                 left_lane.append([x1, y1, x2, y2, current_slope])
         return right_lane, left_lane
 
@@ -187,7 +157,10 @@ class Image_Proc:
 
     def eliminate_outliers(self, points, cutoff, threshold=0.08):
         points = np.array(points)
-        points = points[(points[:, 4] >= cutoff[0]) & (points[:, 4] <= cutoff[1])]
+        first_cutoff = cutoff[0]
+        second_cutoff = cutoff[1]
+        test = points[:, 4]
+        points = points[(points[:, 4] >= first_cutoff) & (points[:, 4] <= second_cutoff)]
         current_slope = np.mean(points[:, 4], axis=0)
         return points[(points[:, 4] <= current_slope + threshold) & (points[:, 4] >= current_slope - threshold)]
 
@@ -195,21 +168,16 @@ class Image_Proc:
     most optimal relationship between a group of points. this will give us a line
     that will pass closest to each
     """
-
-    def linear_regr(self, lanes_array):
-        x = np.reshape(lanes_array[:, [0, 2]], (1, len(lanes_array) * 2))[0]
-        y = np.reshape(lanes_array[:, [1, 3]], (1, len(lanes_array) * 2))[0]
-        A = np.vstack([x, np.ones(len(x))]).T
-        m, c = np.linalg.lstsq(A, y)[0]
-        x = np.array(x)
-        y = np.array(x * m + c)
-        return x, y, m, c
-
-    def extend_point(self, x1, y1, x2, y2, length):
-        line_len = np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
-        x = x2 + (x2 - x1) / line_len * length
-        y = y2 + (y2 - y1) / line_len * length
-        return x, y
+    #https://docs.scipy.org/doc/numpy-1.13.0/reference/generated/numpy.linalg.lstsq.html
+    #scipy library used
+    def linear_regression_least_squares(self, lanes_array):
+        x_axis_array = np.reshape(lanes_array[:, [0, 2]], (1, len(lanes_array) * 2))[0]
+        y__axis_array = np.reshape(lanes_array[:, [1, 3]], (1, len(lanes_array) * 2))[0]
+        A = np.vstack([x_axis_array, np.ones(len(x_axis_array))]).T
+        m, c = sp.linalg.lstsq(A, y__axis_array)[0]
+        x_axis_array = np.array(x_axis_array)
+        y__axis_array = np.array(x_axis_array * m + c)
+        return x_axis_array, y__axis_array, m, c
 
     def process_image(self, image):
         # NOTE: The output you return should be a color image (3 channel) for processing video below
@@ -231,14 +199,40 @@ class Image_Proc:
 
         return annotated_image
 
-    def filter_color(self, image):
+    def filter_color(self, img_hsv, lane_side):
+        #import matplotlib.pyplot as plt
+        #img_hsv = cv2.imread('test_images/solidYellowLeft.jpg')
+        color_select = np.copy(img_hsv)
+
+        hsv_threshold_high = [250, 180, 120]
+        hsv_threshold_low = [190, 0, 0]
+
+        thresholds_hsv = ((img_hsv[:, :, 0] > hsv_threshold_low[0]) & (img_hsv[:, :, 0] < hsv_threshold_high[0])) \
+                     | ((img_hsv[:, :, 1] > hsv_threshold_low[1]) & (img_hsv[:, :, 1] < hsv_threshold_high[1])) \
+                     | ((img_hsv[:, :, 2] > hsv_threshold_low[2]) & (img_hsv[:, :, 2] < hsv_threshold_high[2]))
+
+        color_select[thresholds_hsv] = [0, 0, 0]
+        #plt.imshow(color_select)
+        #plt.show()
+
+        #cv2.imshow('selected', color_select)
+        #cv2.imshow('rgb',img_hsv)
+        # Convert to HSV first
+        #hsv_image = cv2.cvtColor(img_hsv, cv2.COLOR_BGR2HSV)
+        #cv2.imshow('hsv',hsv_image)
+        #cv2.waitKey(0)
+        #cv2.destroyAllWindows()
+
+        #filter_light_colors = cv2.inRange(hsv_image, np.array([0, 0, 210]), np.array([255, 255, 255]))
+        #return cv2.bitwise_and(image, image, mask=filter_light_colors)
+
+        #plt.imshow(color_select)
+        #plt.show()
+        return color_select
         """
         filter the image to mask out darker shades and get lighter pixels only
         """
-        # Convert to HSV first
-        hsv_image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
-        filter_light_colors = cv2.inRange(hsv_image, np.array([0, 0, 210]), np.array([255, 255, 255]))
-        return cv2.bitwise_and(image, image, mask=filter_light_colors)
+
 
     def sliding_window(self, image, stepSize, windowSize):
         # slide a window across the image
@@ -246,5 +240,20 @@ class Image_Proc:
             for x in range(0, image.shape[1], stepSize):
                 # yield the current window
                 yield (x, y, image[y:y + windowSize[1], x:x + windowSize[0]])
+
+    def write_video_sequence(self, video_input_path, video_output_path):
+
+        video_clip = VideoFileClip(video_input_path)
+        video_clip = video_clip.fl_image(self.process_image)
+        video_clip.write_videofile(video_output_path, audio=False)
+
+        HTML("""
+        <video width="960" height="540" controls>
+          <source src="{0}">
+        </video>
+        """.format(video_output_path))
+
+
+
 
 

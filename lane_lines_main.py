@@ -6,8 +6,6 @@ import cv2
 import os
 from Image_Proc import Image_Proc
 
-from moviepy.editor import VideoFileClip
-from IPython.display import HTML
 #%matplotlib inline
 
 #Step 1: Test the system on single test images
@@ -16,11 +14,6 @@ image_proc = Image_Proc()
 
 #reading in an image
 image = mpimg.imread('test_images/solidWhiteRight.jpg')
-#im_cv2 = cv2.imread('test_images/solidWhiteRight.jpg')
-#cv2.imshow('',im_cv2)
-#cv2.waitKey(0)
-#cv2.destroyAllWindows()
-
 
 #printing out some stats and plotting
 print('This image is:', type(image), 'with dimensions:', image.shape)
@@ -73,11 +66,13 @@ max_line_gap = 2  # 3 maximum gap in pixels between connectable line segments
 for file in files:
     if file[0:6] != "output":
         img = mpimg.imread("test_images/" + file)
-
+        plt.imshow(img)
+        plt.show()
         #test = image_proc.sliding_window(img, 1, 3)
+        #hsv_image = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-        #color_filter = image_proc.filter_color(img)
-        #plt.imshow(img)
+        #color_filter = image_proc.filter_color(hsv_image, 0)
+        #plt.imshow(color_filter)
         #plt.show()
 
         gray = image_proc.grayscale(img)
@@ -153,59 +148,13 @@ for file in files:
         plt.imshow(result, cmap='gray')
         plt.show()
 
-'''
-Solid Yellow Left Video
-'''
-solidYellowLeft_output = 'test_videos_output/solidYellowLeft_Output.mp4'
-solidYellowLeft_clip3 = VideoFileClip('test_videos/solidYellowLeft.mp4')
-solidYellowLeft_clip = solidYellowLeft_clip3.fl_image(image_proc.process_image)
-solidYellowLeft_clip.write_videofile(solidYellowLeft_output, audio=False)
+        #test and write various video sequences
 
-HTML("""
-<video width="960" height="540" controls>
-  <source src="{0}">
-</video>
-""".format(solidYellowLeft_output))
+        #Solid Yellow Left Video
+        image_proc.writeVideoSequence('test_videos/solidYellowLeft.mp4', 'test_videos_output/solidYellowLeft_Output.mp4')
 
-'''
-Solid White Right Video
-'''
-solidWhiteRight_output = 'test_videos_output/solidWhiteRight_Output.mp4'
-solidWhiteRight_clip3 = VideoFileClip('test_videos/solidWhiteRight.mp4')
-solidWhiteRight_clip = solidWhiteRight_clip3.fl_image(image_proc.process_image)
-solidWhiteRight_clip.write_videofile(solidWhiteRight_output, audio=False)
+        #Solid White Right Video
+        image_proc.writeVideoSequence('test_videos/solidWhiteRight.mp4', 'test_videos_output/solidWhiteRight_Output.mp4')
 
-HTML("""
-<video width="960" height="540" controls>
-  <source src="{0}">
-</video>
-""".format(solidWhiteRight_output))
-
-'''
-Challenge video
-'''
-challenge_output = 'test_videos_output/challengeOutput.mp4'
-clip3 = VideoFileClip('test_videos/challenge.mp4')
-challenge_clip = clip3.fl_image(image_proc.process_image)
-challenge_clip.write_videofile(challenge_output, audio=False)
-
-HTML("""
-<video width="960" height="540" controls>
-  <source src="{0}">
-</video>
-""".format(challenge_output))
-
-
-'''
-Challenge video
-'''
-challenge_output = 'test_videos_output/challengeOutput.mp4'
-clip3 = VideoFileClip('test_videos/challenge.mp4')
-challenge_clip = clip3.fl_image(image_proc.process_image)
-challenge_clip.write_videofile(challenge_output, audio=False)
-
-HTML("""
-<video width="960" height="540" controls>
-  <source src="{0}">
-</video>
-""".format(challenge_output))
+        #Challenge video
+        image_proc.write_video_sequence('test_videos/challenge.mp4', 'test_videos_output/challengeOutput.mp4')
